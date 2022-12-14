@@ -4,6 +4,7 @@ setwd("/research")
 library(magrittr)
 library(dplyr)
 library(cmdstanr)
+set_cmdstan_path("/root/.cmdstan/cmdstan-2.30.1")
 library(posterior)
 
 rawdata <- read.csv('hot list full data set with organ systems.csv',strip.white=T)

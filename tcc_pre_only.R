@@ -1,12 +1,12 @@
-## LSF_DOCKER_VOLUMES='/storage1/fs1/bafritz/Active/EICU\ Hot\ List/:/research/ /storage1/fs1/christopherking/Active/tcc/:/export/ /home/christopherking/misc_applied_in_dev/tcc/:/script_home/ ' bsub -G 'compute-christopherking' -n 6 -R 'rusage[mem=32GB] span[hosts=1]' -M 32GB -q general -a 'docker(cryanking/rstan:1.1)' R -f /script_home/tcc_pre_only.R
-## LSF_DOCKER_VOLUMES='/storage1/fs1/bafritz/Active/EICU\ Hot\ List/:/research/ /storage1/fs1/christopherking/Active/tcc/:/export/ /home/christopherking/misc_applied_in_dev/tcc/:/script_home/' bsub -G 'compute-christopherking' -n 6 -R 'rusage[mem=32GB] span[hosts=1]' -M 32GB -q general-interactive -Is -a 'docker(cryanking/rstan:1.1)' /bin/bash
+## LSF_DOCKER_VOLUMES='/storage1/fs1/bafritz/Active/EICU\ Hot\ List/:/research/ /storage1/fs1/christopherking/Active/tcc/:/export/ /home/christopherking/gitdir/tcc_analysis/:/script_home/ ' bsub -G 'compute-christopherking' -n 7 -R 'rusage[mem=32GB] span[hosts=1]' -M 32GB -q general -a 'docker(cryanking/rstan:1.1)' R -f /script_home/tcc_pre_only.R
+## LSF_DOCKER_VOLUMES='/storage1/fs1/bafritz/Active/EICU\ Hot\ List/:/research/ /storage1/fs1/christopherking/Active/tcc/:/export/ /home/christopherking/gitdir/tcc_analysis/:/script_home/' bsub -G 'compute-christopherking' -n 6 -R 'rusage[mem=32GB] span[hosts=1]' -M 32GB -q general-interactive -Is -a 'docker(cryanking/rstan:1.1)' /bin/bash
 
 setwd("/research")
 library(magrittr)
 library(dplyr)
 library(cmdstanr)
 library(posterior)
-
+set_cmdstan_path("/root/.cmdstan/cmdstan-2.30.1")
 rawdata <- read.csv('hot list full data set with organ systems.csv',strip.white=T)
 ################################################
 #Filter to the correct cohort
@@ -59,7 +59,6 @@ writeLines(stan_code, "simu_pre.stan")
 
 mod <- cmdstan_model("simu_pre.stan")
 
-temp_used <- 70.
 
 fit <- mod$sample(
   data =  c( grouped_data%>% select(apachel0, y0, N0) %>% as.list , list(J=nrow(grouped_data)  ) ), 
@@ -79,6 +78,31 @@ saveRDS(my_fit_summary, "tcc_pre_summary.rda")
 
 
 # tcc_samples %>% select(starts_with("eta0")) %>% summarize_all(mean) %>% unlist %>% sort %>% data.frame
+# fit <- readRDS("tcc_pre_only.obj")
+# my_fit_summary <- readRDS("tcc_pre_summary.rda")
+
+tcc_samples<-fit$draws(format="df")
+tcc_samples <- tcc_samples[seq(from=1, to=nrow(tcc_samples), by=1000) ,]
+
+
+
+new_N0 <- grouped_data %>% mutate(id=row_number()) %>% select(apachel1, y1, N1, id) %>%  mutate(expected_out = NA_real_, sd_out = NA_real_)
+
+for( i in new_N0$id) {
+sim_new <- rbinom(n=nrow(tcc_samples), size= rep(as.integer(new_N0[i,"y1"]), times=nrow(tcc_samples) ),  prob= plogis( as.numeric(new_N0[i, "apachel1"]) + as.numeric(tcc_samples[[paste0("eta0[", i,"]")]] ) ) )
+
+new_N0[i, "expected_out"] <- mean(sim_new)
+new_N0[i, "sd_out"] <- sd(sim_new)
+}
+
+fitted_ <- (tcc_samples %>% select(starts_with("eta0")) %>% as.matrix ) 
+
+
+
+## match N1 and apache1 -> logit simulation
+
+
+
 
 
 
